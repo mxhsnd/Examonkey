@@ -1,65 +1,261 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+import { useState, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useAppStore } from "@/lib/store";
+import { SYSTEM_PROMPTS } from "@/lib/ai";
+import { db } from "@/lib/db";
+import { CourseGuard } from "@/components/course-guard";
+import { MarkdownRenderer } from "@/components/markdown-renderer";
+import { toast } from "sonner";
+import {
+  Upload,
+  FileText,
+  Image,
+  Type,
+  Loader2,
+  Sparkles,
+  BookOpen,
+} from "lucide-react";
+
+export default function HomePage() {
+  const { aiSettings, currentCourseId } = useAppStore();
+  const [inputText, setInputText] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [extractedText, setExtractedText] = useState("");
+  const [summary, setSummary] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+
+  const handleFileUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const selectedFiles = Array.from(e.target.files || []);
+      if (selectedFiles.length === 0) return;
+      setFiles(selectedFiles);
+      setExtracting(true);
+
+      try {
+        let text = "";
+        for (const file of selectedFiles) {
+          let fileText = "";
+          if (file.type === "application/pdf") {
+            const formData = new FormData();
+            formData.append("file", file);
+            const res = await fetch("/api/parse", {
+              method: "POST",
+              body: formData,
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "PDF 解析失败");
+            fileText = data.text;
+          } else if (file.type.startsWith("image/")) {
+            const base64 = await fileToBase64(file);
+            fileText = `[图片: ${file.name}]\n{{IMAGE:${base64}}}`;
+          } else {
+            fileText = await file.text();
+          }
+
+          text += fileText + "\n\n";
+
+          if (currentCourseId && fileText.trim()) {
+            await db.knowledgeEntries.add({
+              courseId: currentCourseId,
+              source: "upload",
+              title: file.name,
+              content: fileText,
+              fileName: file.name,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+          }
+        }
+        setExtractedText(text);
+        toast.success(`已解析 ${selectedFiles.length} 个文件并存入知识库`);
+      } catch (err) {
+        toast.error("文件解析出错: " + (err as Error).message);
+      } finally {
+        setExtracting(false);
+      }
+    },
+    [currentCourseId]
   );
+
+  async function handleSummarize() {
+    const content = extractedText || inputText;
+    if (!content.trim()) {
+      toast.error("请先上传课件或输入内容");
+      return;
+    }
+    if (!aiSettings?.apiKey) {
+      toast.error("请先在设置中配置 API Key");
+      return;
+    }
+
+    setLoading(true);
+    setSummary("");
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: aiSettings,
+          systemPrompt: SYSTEM_PROMPTS.summarize,
+          messages: [{ role: "user", content: `请分析以下课件内容并生成复习笔记：\n\n${content}` }],
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let result = "";
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          result += chunk;
+          setSummary(result);
+        }
+      }
+    } catch (err) {
+      toast.error("AI 生成失败: " + (err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <CourseGuard>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <BookOpen className="h-6 w-6" />
+          课件智能总结
+        </h2>
+        <p className="text-muted-foreground">
+          上传课件或粘贴内容，AI 帮你生成结构化复习笔记
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>输入课件内容</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="upload">
+            <TabsList className="mb-4">
+              <TabsTrigger value="upload" className="gap-1">
+                <Upload className="h-3.5 w-3.5" />
+                上传文件
+              </TabsTrigger>
+              <TabsTrigger value="text" className="gap-1">
+                <Type className="h-3.5 w-3.5" />
+                粘贴文本
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="upload" className="space-y-3">
+              <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,image/*,.txt,.md"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  id="file-upload"
+                />
+                <label htmlFor="file-upload" className="cursor-pointer space-y-2">
+                  <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    点击上传或拖拽文件到此处
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    支持 PDF、图片、文本文件
+                  </p>
+                </label>
+              </div>
+
+              {files.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {files.map((f, i) => (
+                    <Badge key={i} variant="secondary" className="gap-1">
+                      {f.type.startsWith("image/") ? (
+                        <Image className="h-3 w-3" />
+                      ) : (
+                        <FileText className="h-3 w-3" />
+                      )}
+                      {f.name}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {extracting && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  正在解析文件...
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="text">
+              <Textarea
+                placeholder="粘贴课件内容、笔记、或任何需要总结的学习材料..."
+                rows={10}
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+              />
+            </TabsContent>
+          </Tabs>
+
+          <Button
+            onClick={handleSummarize}
+            disabled={loading || (!extractedText && !inputText.trim())}
+            className="w-full mt-4 gap-2"
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            {loading ? "AI 正在生成..." : "生成智能总结"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {summary && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              AI 复习笔记
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MarkdownRenderer content={summary} />
+          </CardContent>
+        </Card>
+      )}
+    </div>
+    </CourseGuard>
+  );
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
