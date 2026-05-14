@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppStore } from "@/lib/store";
 import { SYSTEM_PROMPTS } from "@/lib/ai";
 import { db } from "@/lib/db";
 import { CourseGuard } from "@/components/course-guard";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
+import { ReferencePicker } from "@/components/reference-picker";
 import { toast } from "sonner";
 import {
   Upload,
@@ -21,6 +21,7 @@ import {
   Loader2,
   Sparkles,
   BookOpen,
+  FolderOpen,
 } from "lucide-react";
 
 export default function HomePage() {
@@ -31,6 +32,7 @@ export default function HomePage() {
   const [summary, setSummary] = useState("");
   const [loading, setLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [selectedRefIds, setSelectedRefIds] = useState<string[]>([]);
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,8 +89,8 @@ export default function HomePage() {
 
   async function handleSummarize() {
     const content = extractedText || inputText;
-    if (!content.trim()) {
-      toast.error("请先上传课件或输入内容");
+    if (!content.trim() && selectedRefIds.length === 0) {
+      toast.error("请先上传课件、输入内容或选择参考文件");
       return;
     }
     if (!aiSettings?.apiKey) {
@@ -100,13 +102,28 @@ export default function HomePage() {
     setSummary("");
 
     try {
+      let fullContent = content;
+
+      if (selectedRefIds.length > 0) {
+        const refTexts = await Promise.all(
+          selectedRefIds.map(async (id) => {
+            const res = await fetch(`/api/references/${id}?courseId=${currentCourseId}`);
+            if (!res.ok) return "";
+            const data = await res.json();
+            return data.textContent || "";
+          })
+        );
+        const refContent = refTexts.filter(Boolean).join("\n\n---\n\n");
+        fullContent = fullContent ? `${fullContent}\n\n---\n\n${refContent}` : refContent;
+      }
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           settings: aiSettings,
           systemPrompt: SYSTEM_PROMPTS.summarize,
-          messages: [{ role: "user", content: `请分析以下课件内容并生成复习笔记：\n\n${content}` }],
+          messages: [{ role: "user", content: `请分析以下课件内容并生成复习笔记：\n\n${fullContent}` }],
         }),
       });
 
@@ -162,6 +179,10 @@ export default function HomePage() {
                 <Type className="h-3.5 w-3.5" />
                 粘贴文本
               </TabsTrigger>
+              <TabsTrigger value="references" className="gap-1">
+                <FolderOpen className="h-3.5 w-3.5" />
+                参考文件
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="upload" className="space-y-3">
@@ -216,11 +237,18 @@ export default function HomePage() {
                 onChange={(e) => setInputText(e.target.value)}
               />
             </TabsContent>
+
+            <TabsContent value="references">
+              <ReferencePicker
+                selectedIds={selectedRefIds}
+                onSelectionChange={setSelectedRefIds}
+              />
+            </TabsContent>
           </Tabs>
 
           <Button
             onClick={handleSummarize}
-            disabled={loading || (!extractedText && !inputText.trim())}
+            disabled={loading || (!extractedText && !inputText.trim() && selectedRefIds.length === 0)}
             className="w-full mt-4 gap-2"
           >
             {loading ? (

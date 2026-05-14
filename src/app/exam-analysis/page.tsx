@@ -4,11 +4,11 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppStore } from "@/lib/store";
 import { SYSTEM_PROMPTS } from "@/lib/ai";
 import { CourseGuard } from "@/components/course-guard";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
+import { ReferencePicker } from "@/components/reference-picker";
 import { toast } from "sonner";
 import {
   Upload,
@@ -17,15 +17,17 @@ import {
   Target,
   TrendingUp,
   Lightbulb,
+  FolderOpen,
 } from "lucide-react";
 
 export default function ExamAnalysisPage() {
-  const { aiSettings } = useAppStore();
+  const { aiSettings, currentCourseId } = useAppStore();
   const [files, setFiles] = useState<File[]>([]);
   const [extractedText, setExtractedText] = useState("");
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [selectedRefIds, setSelectedRefIds] = useState<string[]>([]);
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const selectedFiles = Array.from(e.target.files || []);
@@ -63,8 +65,8 @@ export default function ExamAnalysisPage() {
   }
 
   async function handleAnalyze() {
-    if (!extractedText.trim()) {
-      toast.error("请先上传往年试卷");
+    if (!extractedText.trim() && selectedRefIds.length === 0) {
+      toast.error("请先上传往年试卷或选择参考文件");
       return;
     }
     if (!aiSettings?.apiKey) {
@@ -76,6 +78,21 @@ export default function ExamAnalysisPage() {
     setAnalysis("");
 
     try {
+      let fullContent = extractedText;
+
+      if (selectedRefIds.length > 0) {
+        const refTexts = await Promise.all(
+          selectedRefIds.map(async (id) => {
+            const res = await fetch(`/api/references/${id}?courseId=${currentCourseId}`);
+            if (!res.ok) return "";
+            const data = await res.json();
+            return data.textContent || "";
+          })
+        );
+        const refContent = refTexts.filter(Boolean).join("\n\n---\n\n");
+        fullContent = fullContent ? `${fullContent}\n\n---\n\n${refContent}` : refContent;
+      }
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -85,7 +102,7 @@ export default function ExamAnalysisPage() {
           messages: [
             {
               role: "user",
-              content: `请分析以下往年试卷，总结题型规律和解题套路：\n\n${extractedText}`,
+              content: `请分析以下往年试卷，总结题型规律和解题套路：\n\n${fullContent}`,
             },
           ],
         }),
@@ -169,9 +186,20 @@ export default function ExamAnalysisPage() {
             </div>
           )}
 
+          <div className="border rounded-lg p-4 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <FolderOpen className="h-4 w-4" />
+              从参考文件选择
+            </div>
+            <ReferencePicker
+              selectedIds={selectedRefIds}
+              onSelectionChange={setSelectedRefIds}
+            />
+          </div>
+
           <Button
             onClick={handleAnalyze}
-            disabled={loading || !extractedText.trim()}
+            disabled={loading || (!extractedText.trim() && selectedRefIds.length === 0)}
             className="w-full gap-2"
           >
             {loading ? (

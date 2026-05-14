@@ -11,6 +11,7 @@ import {
   Menu,
   GraduationCap,
   Lightbulb,
+  FolderOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
@@ -21,6 +22,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const navItems = [
   { href: "/", label: "课件总结", icon: BookOpen },
   { href: "/knowledge", label: "知识点", icon: Lightbulb },
+  { href: "/references", label: "参考文件", icon: FolderOpen },
   { href: "/exam-analysis", label: "真题分析", icon: FileText },
   { href: "/quiz", label: "模拟出题", icon: ClipboardList },
   { href: "/chat", label: "AI 答疑", icon: MessageCircle },
