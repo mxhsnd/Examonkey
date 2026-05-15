@@ -13,9 +13,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronDown, Plus, Pencil, Trash2, BookMarked } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-export function CourseSelector() {
+export function CourseSelector({ compact }: { compact?: boolean } = {}) {
   const { courses, addCourse, renameCourse, deleteCourse } = useCourses();
   const { currentCourseId, setCurrentCourseId } = useAppStore();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -81,10 +82,13 @@ export function CourseSelector() {
       <div className="relative" ref={menuRef}>
         <button
           type="button"
-          className="flex w-full items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent transition-all"
+          className={cn(
+            "flex w-full items-center gap-2 rounded-md border text-sm hover:bg-accent transition-all",
+            compact ? "px-2 py-1.5 text-xs" : "px-3 py-2"
+          )}
           onClick={() => setMenuOpen(!menuOpen)}
         >
-          <BookMarked className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <BookMarked className={cn("shrink-0 text-muted-foreground", compact ? "h-3.5 w-3.5" : "h-4 w-4")} />
           <span className="flex-1 truncate text-left">
             {currentCourse?.name || "选择课程"}
           </span>

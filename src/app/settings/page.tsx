@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { PageWrapper } from "@/components/page-wrapper";
 import { DEFAULT_MODELS } from "@/lib/ai";
 import { toast } from "sonner";
 import { Check, ChevronDown, Key, Globe, Bot, Loader2 } from "lucide-react";
@@ -70,6 +71,7 @@ export default function SettingsPage() {
   }
 
   return (
+    <PageWrapper>
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold">设置</h2>
@@ -181,5 +183,6 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
     </div>
+    </PageWrapper>
   );
 }

@@ -15,6 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { CourseGuard } from "@/components/course-guard";
+import { PageWrapper } from "@/components/page-wrapper";
 import { useAppStore } from "@/lib/store";
 import { useReferences, type ReferenceFile } from "@/lib/hooks/use-references";
 import { toast } from "sonner";
@@ -169,6 +170,7 @@ export default function ReferencesPage() {
 
   return (
     <CourseGuard>
+      <PageWrapper>
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
@@ -237,6 +239,7 @@ export default function ReferencesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </PageWrapper>
     </CourseGuard>
   );
 }

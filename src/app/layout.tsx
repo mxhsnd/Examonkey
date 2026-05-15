@@ -3,6 +3,7 @@ import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export const metadata: Metadata = {
   title: "Examonkey - AI 期末突击助手",
@@ -19,11 +20,12 @@ export default function RootLayout({
       <body className="min-h-full flex font-sans">
         <ThemeProvider>
           <Sidebar />
-          <main className="flex-1 md:ml-64 min-h-screen">
-            <div className="container mx-auto max-w-5xl p-6 pt-20 md:pt-6">
-              {children}
-            </div>
+          <main className="flex-1 min-h-screen transition-all duration-200" id="main-content">
+            {children}
           </main>
+          <div className="fixed bottom-4 left-4 z-50">
+            <ThemeToggle />
+          </div>
           <Toaster />
         </ThemeProvider>
       </body>

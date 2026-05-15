@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -15,13 +14,14 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { CourseGuard } from "@/components/course-guard";
+import { PageWrapper } from "@/components/page-wrapper";
 import { useAppStore } from "@/lib/store";
 import { useKnowledge } from "@/lib/hooks/use-knowledge";
 import { toast } from "sonner";
-import { Lightbulb, Plus, Pencil, Trash2, FileUp, PenLine } from "lucide-react";
+import { NotebookPen, Plus, Pencil, Trash2, FileUp, PenLine } from "lucide-react";
 import type { KnowledgeEntry } from "@/lib/types";
 
-export default function KnowledgePage() {
+export default function NotebookPage() {
   const { currentCourseId } = useAppStore();
   const { entries, addEntry, updateEntry, deleteEntry } = useKnowledge(currentCourseId);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -59,19 +59,20 @@ export default function KnowledgePage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("确定删除这条知识？")) return;
+    if (!confirm("确定删除这条笔记？")) return;
     await deleteEntry(id);
     toast.success("已删除");
   }
 
   return (
     <CourseGuard>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <PageWrapper>
+      <div className="flex flex-col h-[calc(100vh-3rem)]">
+        <div className="flex items-center justify-between shrink-0 pb-4">
           <div>
             <h2 className="text-2xl font-bold flex items-center gap-2">
-              <Lightbulb className="h-6 w-6" />
-              知识点
+              <NotebookPen className="h-6 w-6" />
+              笔记本
             </h2>
             <p className="text-muted-foreground">
               管理当前课程的知识条目，AI 将基于这些内容回答问题
@@ -83,11 +84,12 @@ export default function KnowledgePage() {
           </Button>
         </div>
 
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
         {(!entries || entries.length === 0) ? (
           <Card>
             <CardContent className="py-12 text-center text-muted-foreground">
-              <Lightbulb className="h-10 w-10 mx-auto mb-3 opacity-50" />
-              <p>暂无知识条目</p>
+              <NotebookPen className="h-10 w-10 mx-auto mb-3 opacity-50" />
+              <p>暂无笔记</p>
               <p className="text-xs mt-1">上传课件或手动添加内容来构建知识库</p>
             </CardContent>
           </Card>
@@ -139,6 +141,7 @@ export default function KnowledgePage() {
             ))}
           </div>
         )}
+        </div>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -167,6 +170,7 @@ export default function KnowledgePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </PageWrapper>
     </CourseGuard>
   );
 }

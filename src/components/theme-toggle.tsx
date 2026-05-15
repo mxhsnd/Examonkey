@@ -11,10 +11,10 @@ export function ThemeToggle() {
 
   useEffect(() => setMounted(true), []);
 
-  if (!mounted) return <div className="h-8 w-20" />;
+  if (!mounted) return <div className="h-20 w-8" />;
 
   return (
-    <div className="flex items-center gap-0.5 rounded-lg border p-0.5">
+    <div className="flex flex-col items-center gap-0.5 rounded-lg border p-0.5 bg-background/80 backdrop-blur-sm">
       <Button
         variant={theme === "light" ? "secondary" : "ghost"}
         size="icon"
