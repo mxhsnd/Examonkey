@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppStore } from "@/lib/store";
 import { SYSTEM_PROMPTS } from "@/lib/ai";
-import { db } from "@/lib/db";
 import { CourseGuard } from "@/components/course-guard";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { ReferencePicker } from "@/components/reference-picker";
@@ -25,7 +24,7 @@ import {
 } from "lucide-react";
 
 export default function HomePage() {
-  const { aiSettings, currentCourseId } = useAppStore();
+  const { currentCourseId } = useAppStore();
   const [inputText, setInputText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [extractedText, setExtractedText] = useState("");
@@ -65,14 +64,16 @@ export default function HomePage() {
           text += fileText + "\n\n";
 
           if (currentCourseId && fileText.trim()) {
-            await db.knowledgeEntries.add({
-              courseId: currentCourseId,
-              source: "upload",
-              title: file.name,
-              content: fileText,
-              fileName: file.name,
-              createdAt: new Date(),
-              updatedAt: new Date(),
+            await fetch("/api/knowledge", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                courseId: currentCourseId,
+                source: "upload",
+                title: file.name,
+                content: fileText,
+                fileName: file.name,
+              }),
             });
           }
         }
@@ -93,11 +94,6 @@ export default function HomePage() {
       toast.error("请先上传课件、输入内容或选择参考文件");
       return;
     }
-    if (!aiSettings?.apiKey) {
-      toast.error("请先在设置中配置 API Key");
-      return;
-    }
-
     setLoading(true);
     setSummary("");
 
@@ -121,7 +117,6 @@ export default function HomePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          settings: aiSettings,
           systemPrompt: SYSTEM_PROMPTS.summarize,
           messages: [{ role: "user", content: `请分析以下课件内容并生成复习笔记：\n\n${fullContent}` }],
         }),

@@ -1,18 +1,15 @@
+"use client";
+
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { AISettings } from "@/lib/db";
 
 interface AppState {
-  currentCourseId: number | null;
-  setCurrentCourse: (id: number | null) => void;
-
-  currentConversationId: number | null;
-  setCurrentConversation: (id: number | null) => void;
-
-  aiSettings: AISettings | null;
-  setAISettings: (settings: AISettings) => void;
-
+  currentCourseId: string | null;
+  currentConversationId: string | null;
   sidebarOpen: boolean;
+  setCurrentCourseId: (id: string | null) => void;
+  setCurrentConversationId: (id: string | null) => void;
+  setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
 }
 
@@ -20,24 +17,13 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       currentCourseId: null,
-      setCurrentCourse: (id) => set({ currentCourseId: id, currentConversationId: null }),
-
       currentConversationId: null,
-      setCurrentConversation: (id) => set({ currentConversationId: id }),
-
-      aiSettings: null,
-      setAISettings: (settings) => set({ aiSettings: settings }),
-
       sidebarOpen: true,
+      setCurrentCourseId: (id) => set({ currentCourseId: id, currentConversationId: null }),
+      setCurrentConversationId: (id) => set({ currentConversationId: id }),
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
     }),
-    {
-      name: "examonkey-store",
-      partialize: (state) => ({
-        aiSettings: state.aiSettings,
-        currentCourseId: state.currentCourseId,
-        currentConversationId: state.currentConversationId,
-      }),
-    }
+    { name: "examonkey-store" }
   )
 );

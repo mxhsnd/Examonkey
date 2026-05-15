@@ -2,9 +2,14 @@ import { streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { NextRequest } from "next/server";
+import { readJson } from "@/lib/server/storage";
+import type { AISettings } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
-  const { messages, settings, systemPrompt } = await req.json();
+  const { messages, systemPrompt, settings: clientSettings } = await req.json();
+
+  // Use client-provided settings or fall back to server-stored settings
+  const settings = clientSettings || await readJson<AISettings | null>("settings.json", null);
 
   if (!settings?.apiKey) {
     return new Response("未配置 API Key", { status: 400 });

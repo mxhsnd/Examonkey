@@ -19,7 +19,7 @@ import { useAppStore } from "@/lib/store";
 import { useKnowledge } from "@/lib/hooks/use-knowledge";
 import { toast } from "sonner";
 import { Lightbulb, Plus, Pencil, Trash2, FileUp, PenLine } from "lucide-react";
-import type { KnowledgeEntry } from "@/lib/db";
+import type { KnowledgeEntry } from "@/lib/types";
 
 export default function KnowledgePage() {
   const { currentCourseId } = useAppStore();
@@ -58,7 +58,7 @@ export default function KnowledgePage() {
     setDialogOpen(false);
   }
 
-  async function handleDelete(id: number) {
+  async function handleDelete(id: string) {
     if (!confirm("确定删除这条知识？")) return;
     await deleteEntry(id);
     toast.success("已删除");
@@ -128,7 +128,7 @@ export default function KnowledgePage() {
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        onClick={() => handleDelete(entry.id!)}
+                        onClick={() => handleDelete(entry.id)}
                       >
                         <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>

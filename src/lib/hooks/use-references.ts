@@ -12,7 +12,7 @@ export interface ReferenceFile {
   textContent?: string;
 }
 
-export function useReferences(courseId: number | null) {
+export function useReferences(courseId: string | null) {
   const [entries, setEntries] = useState<ReferenceFile[]>([]);
   const [loading, setLoading] = useState(false);
 

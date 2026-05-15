@@ -1,32 +1,48 @@
 "use client";
 
-import { useLiveQuery } from "dexie-react-hooks";
-import { db, type Course } from "@/lib/db";
+import { useState, useEffect, useCallback } from "react";
+import type { Course } from "@/lib/types";
 
 export function useCourses() {
-  const courses = useLiveQuery(() => db.courses.orderBy("createdAt").toArray());
+  const [courses, setCourses] = useState<Course[]>();
+  const [loading, setLoading] = useState(true);
 
-  async function addCourse(name: string): Promise<number> {
-    return db.courses.add({ name, createdAt: new Date() }) as Promise<number>;
-  }
+  const fetchCourses = useCallback(async () => {
+    try {
+      const res = await fetch("/api/courses");
+      const data = await res.json();
+      setCourses(data);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  async function renameCourse(id: number, name: string) {
-    await db.courses.update(id, { name });
-  }
+  useEffect(() => { fetchCourses(); }, [fetchCourses]);
 
-  async function deleteCourse(id: number) {
-    await db.transaction("rw", [db.courses, db.materials, db.examPapers, db.knowledgeEntries, db.conversations, db.chatMessages], async () => {
-      const convIds = (await db.conversations.where("courseId").equals(id).primaryKeys()) as number[];
-      if (convIds.length > 0) {
-        await db.chatMessages.where("conversationId").anyOf(convIds).delete();
-      }
-      await db.conversations.where("courseId").equals(id).delete();
-      await db.knowledgeEntries.where("courseId").equals(id).delete();
-      await db.materials.where("courseId").equals(id).delete();
-      await db.examPapers.where("courseId").equals(id).delete();
-      await db.courses.delete(id);
+  async function addCourse(name: string): Promise<string> {
+    const res = await fetch("/api/courses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
     });
+    const course = await res.json();
+    await fetchCourses();
+    return course.id;
   }
 
-  return { courses, addCourse, renameCourse, deleteCourse };
+  async function renameCourse(id: string, name: string) {
+    await fetch(`/api/courses/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    await fetchCourses();
+  }
+
+  async function deleteCourse(id: string) {
+    await fetch(`/api/courses/${id}`, { method: "DELETE" });
+    await fetchCourses();
+  }
+
+  return { courses, loading, addCourse, renameCourse, deleteCourse };
 }

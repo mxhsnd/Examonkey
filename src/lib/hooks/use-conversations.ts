@@ -1,37 +1,54 @@
 "use client";
 
-import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "@/lib/db";
+import { useState, useEffect, useCallback } from "react";
+import type { Conversation } from "@/lib/types";
 
-export function useConversations(courseId: number | null) {
-  const conversations = useLiveQuery(
-    () =>
-      courseId
-        ? db.conversations.where("courseId").equals(courseId).reverse().sortBy("updatedAt")
-        : [],
-    [courseId]
-  );
+export function useConversations(courseId: string | null) {
+  const [conversations, setConversations] = useState<Conversation[]>();
+  const [loading, setLoading] = useState(true);
 
-  async function createConversation(courseId: number, title = "新对话"): Promise<number> {
-    const now = new Date();
-    return db.conversations.add({
-      courseId,
-      title,
-      createdAt: now,
-      updatedAt: now,
-    }) as Promise<number>;
-  }
+  const fetchConversations = useCallback(async () => {
+    if (!courseId) { setConversations([]); setLoading(false); return; }
+    try {
+      const res = await fetch(`/api/conversations?courseId=${courseId}`);
+      const data = await res.json();
+      data.sort((a: Conversation, b: Conversation) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
+      setConversations(data);
+    } finally {
+      setLoading(false);
+    }
+  }, [courseId]);
 
-  async function updateTitle(id: number, title: string) {
-    await db.conversations.update(id, { title, updatedAt: new Date() });
-  }
+  useEffect(() => { fetchConversations(); }, [fetchConversations]);
 
-  async function deleteConversation(id: number) {
-    await db.transaction("rw", [db.conversations, db.chatMessages], async () => {
-      await db.chatMessages.where("conversationId").equals(id).delete();
-      await db.conversations.delete(id);
+  async function createConversation(courseId: string, title = "新对话"): Promise<string> {
+    const res = await fetch("/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ courseId, title }),
     });
+    const conv = await res.json();
+    await fetchConversations();
+    return conv.id;
   }
 
-  return { conversations, createConversation, updateTitle, deleteConversation };
+  async function updateTitle(id: string, title: string) {
+    if (!courseId) return;
+    await fetch(`/api/conversations/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ courseId, title }),
+    });
+    await fetchConversations();
+  }
+
+  async function deleteConversation(id: string) {
+    if (!courseId) return;
+    await fetch(`/api/conversations/${id}?courseId=${courseId}`, { method: "DELETE" });
+    await fetchConversations();
+  }
+
+  return { conversations, loading, createConversation, updateTitle, deleteConversation, refetch: fetchConversations };
 }

@@ -1,36 +1,53 @@
 "use client";
 
-import { useLiveQuery } from "dexie-react-hooks";
-import { db, type KnowledgeEntry } from "@/lib/db";
+import { useState, useEffect, useCallback } from "react";
+import type { KnowledgeEntry } from "@/lib/types";
 
-export function useKnowledge(courseId: number | null) {
-  const entries = useLiveQuery(
-    () =>
-      courseId
-        ? db.knowledgeEntries.where("courseId").equals(courseId).reverse().sortBy("createdAt")
-        : [],
-    [courseId]
-  );
+export function useKnowledge(courseId: string | null) {
+  const [entries, setEntries] = useState<KnowledgeEntry[]>();
+  const [loading, setLoading] = useState(true);
+
+  const fetchEntries = useCallback(async () => {
+    if (!courseId) { setEntries([]); setLoading(false); return; }
+    try {
+      const res = await fetch(`/api/knowledge?courseId=${courseId}`);
+      const data = await res.json();
+      data.sort((a: KnowledgeEntry, b: KnowledgeEntry) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      setEntries(data);
+    } finally {
+      setLoading(false);
+    }
+  }, [courseId]);
+
+  useEffect(() => { fetchEntries(); }, [fetchEntries]);
 
   async function addEntry(title: string, content: string) {
     if (!courseId) return;
-    await db.knowledgeEntries.add({
-      courseId,
-      source: "manual",
-      title,
-      content,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    await fetch("/api/knowledge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ courseId, source: "manual", title, content }),
     });
+    await fetchEntries();
   }
 
-  async function updateEntry(id: number, data: Partial<Pick<KnowledgeEntry, "title" | "content">>) {
-    await db.knowledgeEntries.update(id, { ...data, updatedAt: new Date() });
+  async function updateEntry(id: string, data: Partial<Pick<KnowledgeEntry, "title" | "content">>) {
+    if (!courseId) return;
+    await fetch(`/api/knowledge/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ courseId, ...data }),
+    });
+    await fetchEntries();
   }
 
-  async function deleteEntry(id: number) {
-    await db.knowledgeEntries.delete(id);
+  async function deleteEntry(id: string) {
+    if (!courseId) return;
+    await fetch(`/api/knowledge/${id}?courseId=${courseId}`, { method: "DELETE" });
+    await fetchEntries();
   }
 
-  return { entries, addEntry, updateEntry, deleteEntry };
+  return { entries, loading, addEntry, updateEntry, deleteEntry };
 }

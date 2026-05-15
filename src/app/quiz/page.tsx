@@ -10,7 +10,6 @@ import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppStore } from "@/lib/store";
 import { SYSTEM_PROMPTS } from "@/lib/ai";
-import { db } from "@/lib/db";
 import { CourseGuard } from "@/components/course-guard";
 import { toast } from "sonner";
 import {
@@ -34,7 +33,7 @@ interface Question {
 }
 
 export default function QuizPage() {
-  const { aiSettings, currentCourseId } = useAppStore();
+  const { currentCourseId } = useAppStore();
   const [topic, setTopic] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(false);
@@ -47,11 +46,6 @@ export default function QuizPage() {
       toast.error("请输入课程内容或知识点");
       return;
     }
-    if (!aiSettings?.apiKey) {
-      toast.error("请先在设置中配置 API Key");
-      return;
-    }
-
     setLoading(true);
     setQuestions([]);
     setUserAnswers({});
@@ -61,12 +55,10 @@ export default function QuizPage() {
     try {
       let content = topic;
       if (currentCourseId) {
-        const entries = await db.knowledgeEntries
-          .where("courseId")
-          .equals(currentCourseId)
-          .toArray();
+        const res = await fetch(`/api/knowledge?courseId=${currentCourseId}`);
+        const entries = await res.json();
         if (entries.length > 0) {
-          const kb = entries.map((e) => e.content).join("\n\n").slice(0, 8000);
+          const kb = entries.map((e: { content: string }) => e.content).join("\n\n").slice(0, 8000);
           content = `知识库内容：\n${kb}\n\n用户指定范围：${topic}`;
         }
       }
@@ -75,7 +67,6 @@ export default function QuizPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          settings: aiSettings,
           systemPrompt: SYSTEM_PROMPTS.generateQuestions,
           messages: [
             {

@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppStore } from "@/lib/store";
 import { SYSTEM_PROMPTS } from "@/lib/ai";
-import { db } from "@/lib/db";
 import { CourseGuard } from "@/components/course-guard";
 import { ConversationList } from "@/components/conversation-list";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
@@ -19,9 +18,9 @@ import { Send, Loader2, MessageCircle, Bot, User } from "lucide-react";
 const MAX_CONTEXT_CHARS = 10000;
 
 export default function ChatPage() {
-  const { aiSettings, currentCourseId, currentConversationId, setCurrentConversation } = useAppStore();
+  const { currentCourseId, currentConversationId, setCurrentConversationId } = useAppStore();
   const { createConversation, updateTitle } = useConversations(currentCourseId);
-  const { messages, addMessage, updateMessage } = useChatMessages(currentConversationId);
+  const { messages, addMessage } = useChatMessages(currentConversationId, currentCourseId);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -35,29 +34,25 @@ export default function ChatPage() {
 
   async function getKnowledgeContext(): Promise<string> {
     if (!currentCourseId) return "暂无上传课件";
-    const entries = await db.knowledgeEntries
-      .where("courseId")
-      .equals(currentCourseId)
-      .reverse()
-      .sortBy("updatedAt");
+    try {
+      const res = await fetch(`/api/knowledge?courseId=${currentCourseId}`);
+      const entries = await res.json();
+      if (entries.length === 0) return "暂无上传课件";
 
-    if (entries.length === 0) return "暂无上传课件";
-
-    let context = "";
-    for (const entry of entries) {
-      const chunk = `【${entry.title}】\n${entry.content}\n\n---\n\n`;
-      if (context.length + chunk.length > MAX_CONTEXT_CHARS) break;
-      context += chunk;
+      let context = "";
+      for (const entry of entries) {
+        const chunk = `【${entry.title}】\n${entry.content}\n\n---\n\n`;
+        if (context.length + chunk.length > MAX_CONTEXT_CHARS) break;
+        context += chunk;
+      }
+      return context;
+    } catch {
+      return "暂无上传课件";
     }
-    return context;
   }
 
   async function handleSend() {
     if (!input.trim()) return;
-    if (!aiSettings?.apiKey) {
-      toast.error("请先在设置中配置 API Key");
-      return;
-    }
     if (!currentCourseId) return;
 
     const userContent = input.trim();
@@ -69,7 +64,7 @@ export default function ChatPage() {
       let convId = currentConversationId;
       if (!convId) {
         convId = await createConversation(currentCourseId);
-        setCurrentConversation(convId);
+        setCurrentConversationId(convId);
       }
 
       await addMessage(convId, currentCourseId, "user", userContent);
@@ -92,7 +87,6 @@ export default function ChatPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          settings: aiSettings,
           systemPrompt,
           messages: allMessages,
         }),
@@ -132,7 +126,7 @@ export default function ChatPage() {
 
   const displayMessages = [
     ...(messages || []),
-    ...(streamingContent ? [{ id: -1, role: "assistant" as const, content: streamingContent, conversationId: 0, courseId: 0, createdAt: new Date() }] : []),
+    ...(streamingContent ? [{ id: "streaming", role: "assistant" as const, content: streamingContent, conversationId: "", courseId: "", createdAt: "" }] : []),
   ];
 
   return (

@@ -1,6 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import type { AISettings } from "@/lib/db";
+import type { AISettings } from "@/lib/types";
 
 export type AIProvider = ReturnType<typeof createOpenAI> | ReturnType<typeof createAnthropic>;
 
