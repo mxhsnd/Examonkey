@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -14,163 +12,246 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { CourseGuard } from "@/components/course-guard";
-import { PageWrapper } from "@/components/page-wrapper";
 import { useAppStore } from "@/lib/store";
 import { useKnowledge } from "@/lib/hooks/use-knowledge";
+import { BlockEditor } from "@/components/block-editor";
 import { toast } from "sonner";
-import { NotebookPen, Plus, Pencil, Trash2, FileUp, PenLine } from "lucide-react";
+import {
+  NotebookPen,
+  Plus,
+  Trash2,
+  ArrowLeft,
+  FileText,
+} from "lucide-react";
 import type { KnowledgeEntry } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export default function NotebookPage() {
-  const { currentCourseId } = useAppStore();
-  const { entries, addEntry, updateEntry, deleteEntry } = useKnowledge(currentCourseId);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<KnowledgeEntry | null>(null);
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const { currentCourseId, sidebarOpen } = useAppStore();
+  const { entries, addEntry, updateEntry, deleteEntry } =
+    useKnowledge(currentCourseId);
 
-  function openCreate() {
-    setEditing(null);
-    setTitle("");
-    setContent("");
-    setDialogOpen(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newContent, setNewContent] = useState("");
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const selected = entries?.find((e) => e.id === selectedId) ?? null;
+
+  useEffect(() => {
+    if (selected) {
+      setEditContent(selected.content);
+      setEditTitle(selected.title);
+    }
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (selected && document.activeElement?.tagName !== "TEXTAREA" && document.activeElement?.tagName !== "INPUT") {
+      setEditContent(selected.content);
+      setEditTitle(selected.title);
+    }
+  }, [selected?.content, selected?.title]);
+
+  const autoSave = useCallback(
+    (title: string, content: string) => {
+      if (!selected) return;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        updateEntry(selected.id, { title: title.trim() || selected.title, content });
+      }, 500);
+    },
+    [selected, updateEntry]
+  );
+
+  function handleContentChange(value: string) {
+    setEditContent(value);
+    autoSave(editTitle, value);
   }
 
-  function openEdit(entry: KnowledgeEntry) {
-    setEditing(entry);
-    setTitle(entry.title);
-    setContent(entry.content);
-    setDialogOpen(true);
+  function handleTitleChange(value: string) {
+    setEditTitle(value);
+    autoSave(value, editContent);
   }
 
-  async function handleSave() {
-    if (!title.trim() || !content.trim()) {
+  function openNote(entry: KnowledgeEntry) {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    setSelectedId(entry.id);
+    setEditContent(entry.content);
+    setEditTitle(entry.title);
+  }
+
+  async function handleDelete() {
+    if (!selected) return;
+    if (!confirm("确定删除这条笔记？")) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    await deleteEntry(selected.id);
+    setSelectedId(null);
+    toast.success("已删除");
+  }
+
+  async function handleCreate() {
+    if (!newTitle.trim() || !newContent.trim()) {
       toast.error("标题和内容不能为空");
       return;
     }
-    if (editing?.id) {
-      await updateEntry(editing.id, { title: title.trim(), content: content.trim() });
-      toast.success("已更新");
-    } else {
-      await addEntry(title.trim(), content.trim());
-      toast.success("已添加");
-    }
-    setDialogOpen(false);
-  }
-
-  async function handleDelete(id: string) {
-    if (!confirm("确定删除这条笔记？")) return;
-    await deleteEntry(id);
-    toast.success("已删除");
+    await addEntry(newTitle.trim(), newContent.trim());
+    setCreateOpen(false);
+    setNewTitle("");
+    setNewContent("");
+    toast.success("已创建");
   }
 
   return (
     <CourseGuard>
-      <PageWrapper>
-      <div className="flex flex-col h-[calc(100vh-3rem)]">
-        <div className="flex items-center justify-between shrink-0 pb-4">
-          <div>
-            <h2 className="text-2xl font-bold flex items-center gap-2">
-              <NotebookPen className="h-6 w-6" />
-              笔记本
-            </h2>
-            <p className="text-muted-foreground">
-              管理当前课程的知识条目，AI 将基于这些内容回答问题
-            </p>
+      <div
+        className={cn(
+          "fixed inset-0 flex transition-all duration-200",
+          sidebarOpen ? "left-56" : "left-14"
+        )}
+      >
+        {/* Left: note list */}
+        <div className="w-64 shrink-0 border-r flex flex-col bg-background">
+          <div className="flex items-center justify-between px-4 py-3 border-b">
+            <div className="flex items-center gap-2">
+              <NotebookPen className="h-4 w-4" />
+              <span className="font-semibold text-sm">笔记本</span>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0"
+              onClick={() => {
+                setNewTitle("");
+                setNewContent("");
+                setCreateOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
           </div>
-          <Button onClick={openCreate} className="gap-1">
-            <Plus className="h-4 w-4" />
-            添加条目
-          </Button>
+
+          <div className="flex-1 overflow-y-auto">
+            {(!entries || entries.length === 0) ? (
+              <div className="text-center text-muted-foreground py-12 px-4">
+                <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                <p className="text-xs">暂无笔记</p>
+                <p className="text-xs mt-1 opacity-70">点击 + 创建第一条笔记</p>
+              </div>
+            ) : (
+              <div className="py-2">
+                {entries.map((entry) => (
+                  <button
+                    key={entry.id}
+                    onClick={() => openNote(entry)}
+                    className={cn(
+                      "w-full text-left px-4 py-2.5 transition-colors",
+                      "hover:bg-accent/50",
+                      selectedId === entry.id &&
+                        "bg-accent text-accent-foreground"
+                    )}
+                  >
+                    <p className="text-sm font-medium truncate">
+                      {entry.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">
+                      {entry.content.slice(0, 50)}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {(!entries || entries.length === 0) ? (
-          <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">
-              <NotebookPen className="h-10 w-10 mx-auto mb-3 opacity-50" />
-              <p>暂无笔记</p>
-              <p className="text-xs mt-1">上传课件或手动添加内容来构建知识库</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {entries.map((entry) => (
-              <Card key={entry.id}>
-                <CardContent className="py-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-medium truncate">{entry.title}</h3>
-                        <Badge variant="secondary" className="shrink-0 gap-1 text-xs">
-                          {entry.source === "upload" ? (
-                            <><FileUp className="h-3 w-3" />上传</>
-                          ) : (
-                            <><PenLine className="h-3 w-3" />手动</>
-                          )}
-                        </Badge>
-                      </div>
-                      {entry.fileName && (
-                        <p className="text-xs text-muted-foreground mb-1">
-                          来源: {entry.fileName}
-                        </p>
-                      )}
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {entry.content}
-                      </p>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => openEdit(entry)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => handleDelete(entry.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+        {/* Right: note content */}
+        <div className="flex-1 flex flex-col min-w-0 bg-background">
+          {!selected ? (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <NotebookPen className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">选择一条笔记查看内容</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Toolbar */}
+              <div className="flex items-center justify-between px-6 py-3 border-b shrink-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 shrink-0 lg:hidden"
+                    onClick={() => setSelectedId(null)}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  <Input
+                    value={editTitle}
+                    onChange={(e) => handleTitleChange(e.target.value)}
+                    className="text-lg font-semibold h-8 border-none shadow-none px-0 focus-visible:ring-0"
+                    placeholder="笔记标题"
+                  />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDelete}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Content area — block editor */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <BlockEditor
+                  content={editContent}
+                  onChange={handleContentChange}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Create dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editing ? "编辑条目" : "添加条目"}</DialogTitle>
+            <DialogTitle>新建笔记</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <Input
-              placeholder="标题，如：第三章 微积分基本定理"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              placeholder="标题"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
               autoFocus
             />
             <Textarea
-              placeholder="知识内容..."
+              placeholder="内容（支持 Markdown）..."
               rows={10}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
+              value={newContent}
+              onChange={(e) => setNewContent(e.target.value)}
             />
           </div>
           <DialogFooter>
-            <Button onClick={handleSave} disabled={!title.trim() || !content.trim()}>
-              保存
+            <Button
+              onClick={handleCreate}
+              disabled={!newTitle.trim() || !newContent.trim()}
+            >
+              创建
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      </PageWrapper>
     </CourseGuard>
   );
 }

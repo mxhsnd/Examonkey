@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -116,7 +115,7 @@ export function ReferencesPanel({ courseId }: { courseId: string }) {
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto">
         <div className="p-3 space-y-1">
           {entries.length === 0 ? (
             <div className="text-center text-muted-foreground py-6">
@@ -141,7 +140,7 @@ export function ReferencesPanel({ courseId }: { courseId: string }) {
             ))
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg">

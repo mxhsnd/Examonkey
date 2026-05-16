@@ -5,9 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useChatMessages } from "@/lib/hooks/use-chat-messages";
 import { useConversations } from "@/lib/hooks/use-conversations";
+import { useAppStore, useLearningConversationId, useLearningNoteId } from "@/lib/store";
 import { SYSTEM_PROMPTS } from "@/lib/ai";
 import { cn } from "@/lib/utils";
-import { Send, Loader2, RotateCcw, GraduationCap, User } from "lucide-react";
+import { Send, RotateCcw, GraduationCap, User } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface MonkeyChatPanelProps {
   panelId: string;
@@ -20,8 +23,57 @@ interface LocalMessage {
   content: string;
 }
 
+function parseNoteOperations(text: string) {
+  const ops: Array<
+    | { type: "update"; noteId: string; content: string }
+    | { type: "create"; title: string; content: string }
+  > = [];
+
+  const updateRegex = /\[\[NOTE_UPDATE:(.+?)\]\]\n?([\s\S]*?)\[\[\/NOTE_UPDATE\]\]/g;
+  let match;
+  while ((match = updateRegex.exec(text)) !== null) {
+    ops.push({ type: "update", noteId: match[1].trim(), content: match[2].trim() });
+  }
+
+  const createRegex = /\[\[NOTE_CREATE:(.+?)\]\]\n?([\s\S]*?)\[\[\/NOTE_CREATE\]\]/g;
+  while ((match = createRegex.exec(text)) !== null) {
+    ops.push({ type: "create", title: match[1].trim(), content: match[2].trim() });
+  }
+
+  const displayText = text
+    .replace(/\[\[NOTE_UPDATE:.+?\]\]\n?[\s\S]*?\[\[\/NOTE_UPDATE\]\]/g, "")
+    .replace(/\[\[NOTE_CREATE:.+?\]\]\n?[\s\S]*?\[\[\/NOTE_CREATE\]\]/g, "")
+    .trim();
+
+  return { ops, displayText };
+}
+
+async function executeNoteOps(
+  ops: ReturnType<typeof parseNoteOperations>["ops"],
+  courseId: string
+) {
+  for (const op of ops) {
+    if (op.type === "update") {
+      await fetch(`/api/knowledge/${op.noteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, content: op.content }),
+      });
+    } else {
+      await fetch("/api/knowledge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, source: "manual", title: op.title, content: op.content }),
+      });
+    }
+  }
+}
+
 export function MonkeyChatPanel({ panelId, courseId }: MonkeyChatPanelProps) {
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const { setLearningConversationId } = useAppStore();
+  const learningConversationId = useLearningConversationId();
+  const learningNoteId = useLearningNoteId();
+  const [conversationId, setConversationId] = useState<string | null>(learningConversationId);
   const { createConversation } = useConversations(courseId);
   const { messages: serverMessages, addMessage } = useChatMessages(conversationId, courseId);
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
@@ -29,11 +81,24 @@ export function MonkeyChatPanel({ panelId, courseId }: MonkeyChatPanelProps) {
   const [streaming, setStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const convIdRef = useRef<string | null>(null);
+  const prevCourseRef = useRef(courseId);
+
+  // Reset everything when course changes
+  useEffect(() => {
+    if (courseId !== prevCourseRef.current) {
+      prevCourseRef.current = courseId;
+      setConversationId(null);
+      setLocalMessages([]);
+      setStreamingText("");
+    }
+  }, [courseId]);
 
   useEffect(() => {
-    convIdRef.current = conversationId;
-  }, [conversationId]);
+    setConversationId(learningConversationId);
+    if (!learningConversationId) {
+      setLocalMessages([]);
+    }
+  }, [learningConversationId]);
 
   useEffect(() => {
     if (serverMessages && serverMessages.length > 0) {
@@ -50,9 +115,53 @@ export function MonkeyChatPanel({ panelId, courseId }: MonkeyChatPanelProps) {
   const handleNewChat = useCallback(async () => {
     const id = await createConversation(courseId, "Monkey Chat");
     setConversationId(id);
+    setLearningConversationId(id);
     setLocalMessages([]);
     setStreamingText("");
-  }, [courseId, createConversation]);
+  }, [courseId, createConversation, setLearningConversationId]);
+
+  async function fetchContext(): Promise<string> {
+    try {
+      const res = await fetch(`/api/context?courseId=${courseId}`);
+      if (!res.ok) return "（无法加载课程材料）";
+      const data = await res.json();
+
+      let ctx = "";
+
+      if (data.references?.length > 0) {
+        ctx += "## 参考文件\n\n";
+        for (const ref of data.references) {
+          ctx += `### ${ref.title}\n${ref.textContent}\n\n`;
+        }
+      }
+
+      if (data.notes?.length > 0) {
+        ctx += "## 学生笔记\n\n";
+        for (const note of data.notes) {
+          ctx += `### ${note.title}（ID: ${note.id}）\n${note.content}\n\n`;
+        }
+      }
+
+      if (data.examPapers?.length > 0) {
+        ctx += "## 往年试卷\n\n";
+        for (const paper of data.examPapers) {
+          ctx += `### ${paper.name}${paper.year ? `（${paper.year}）` : ""}\n${paper.content}\n`;
+          if (paper.analysis) {
+            ctx += `\n**已有分析：**\n${paper.analysis}\n`;
+          }
+          ctx += "\n";
+        }
+      }
+
+      if (learningNoteId) {
+        ctx += `\n当前学生正在查看的笔记 ID: ${learningNoteId}\n`;
+      }
+
+      return ctx || "（当前课程暂无参考文件、笔记和试卷）";
+    } catch {
+      return "（加载课程材料失败）";
+    }
+  }
 
   async function handleSend() {
     const text = input.trim();
@@ -62,6 +171,7 @@ export function MonkeyChatPanel({ panelId, courseId }: MonkeyChatPanelProps) {
     if (!convId) {
       convId = await createConversation(courseId, text.slice(0, 20));
       setConversationId(convId);
+      setLearningConversationId(convId);
     }
 
     setInput("");
@@ -75,6 +185,9 @@ export function MonkeyChatPanel({ panelId, courseId }: MonkeyChatPanelProps) {
     setStreamingText("");
 
     try {
+      const context = await fetchContext();
+      const systemPrompt = SYSTEM_PROMPTS.monkey.replace("{context}", context);
+
       const chatMessages = [
         ...localMessages.map((m) => ({ role: m.role, content: m.content })),
         { role: "user" as const, content: text },
@@ -85,7 +198,7 @@ export function MonkeyChatPanel({ panelId, courseId }: MonkeyChatPanelProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: chatMessages,
-          systemPrompt: SYSTEM_PROMPTS.monkey,
+          systemPrompt,
         }),
       });
 
@@ -109,11 +222,19 @@ export function MonkeyChatPanel({ panelId, courseId }: MonkeyChatPanelProps) {
         }
       }
 
-      const assistantMsg: LocalMessage = { id: `local-${Date.now()}-ai`, role: "assistant", content: fullText };
+      // Parse note operations
+      const { ops, displayText } = parseNoteOperations(fullText);
+
+      if (ops.length > 0) {
+        await executeNoteOps(ops, courseId);
+      }
+
+      const finalContent = displayText || fullText;
+      const assistantMsg: LocalMessage = { id: `local-${Date.now()}-ai`, role: "assistant", content: finalContent };
       setLocalMessages((prev) => [...prev, assistantMsg]);
       setStreamingText("");
 
-      addMessage(convId, courseId, "assistant", fullText);
+      addMessage(convId, courseId, "assistant", finalContent);
     } catch (err) {
       setStreamingText(`请求失败: ${(err as Error).message}`);
     } finally {
@@ -144,7 +265,13 @@ export function MonkeyChatPanel({ panelId, courseId }: MonkeyChatPanelProps) {
             ? "bg-primary text-primary-foreground rounded-tr-sm"
             : "bg-muted rounded-tl-sm"
         )}>
-          <div className="whitespace-pre-wrap break-words">{content}</div>
+          {isUser ? (
+            <div className="whitespace-pre-wrap break-words">{content}</div>
+          ) : (
+            <article className="prose max-w-none text-[13px] [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_h1]:text-sm [&_h2]:text-[13px] [&_h3]:text-[13px] [&_p]:text-[13px] [&_li]:text-[13px] [&_code]:text-[11px] [&_pre]:my-1.5 [&_blockquote]:my-1.5 [&_hr]:my-2">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            </article>
+          )}
         </div>
       </div>
     );
@@ -177,7 +304,7 @@ export function MonkeyChatPanel({ panelId, courseId }: MonkeyChatPanelProps) {
               <GraduationCap className="h-6 w-6 text-primary" />
             </div>
             <p className="text-sm font-medium">有什么问题尽管问我</p>
-            <p className="text-xs mt-1 opacity-60">我可以帮你总结知识点、分析真题、模拟出题</p>
+            <p className="text-xs mt-1 opacity-60">我能看到你的参考文件和笔记，也可以帮你修改笔记</p>
           </div>
         )}
         {localMessages.map((msg) => renderMessage(msg.role, msg.content, msg.id))}
@@ -204,7 +331,7 @@ export function MonkeyChatPanel({ panelId, courseId }: MonkeyChatPanelProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="询问 Examonkey"
+            placeholder="询问 Examonkey..."
             rows={1}
             className="min-h-[36px] max-h-[120px] resize-none text-sm border-0 shadow-none focus-visible:ring-0 p-1"
           />

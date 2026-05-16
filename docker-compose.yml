@@ -1,0 +1,11 @@
+services:
+  examonkey:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - examonkey-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  examonkey-data:
