@@ -2,13 +2,11 @@
 
 import { useAppStore } from "@/lib/store";
 import { CourseGuard } from "@/components/course-guard";
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from "@/components/ui/resizable";
-import { NotebookPanel } from "@/components/panels/notebook-panel";
 import { ReferencesPanel } from "@/components/panels/references-panel";
+import {
+  NotebookEditorPanel,
+  NotebookSelectorPanel,
+} from "@/components/panels/notebook-panel";
 import { MonkeyChatPanel } from "@/components/panels/monkey-chat-panel";
 import { cn } from "@/lib/utils";
 
@@ -17,24 +15,29 @@ export default function LearningPage() {
 
   return (
     <CourseGuard>
-      <div className={cn("fixed inset-0 transition-all duration-200", sidebarOpen ? "left-56" : "left-14")}>
-        <ResizablePanelGroup orientation="horizontal">
-          <ResizablePanel defaultSize={33} minSize={20}>
-            <ResizablePanelGroup orientation="vertical">
-              <ResizablePanel defaultSize={50} minSize={20}>
-                <ReferencesPanel courseId={currentCourseId!} />
-              </ResizablePanel>
-              <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={50} minSize={20}>
-                <NotebookPanel courseId={currentCourseId!} />
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={67} minSize={40}>
+      <div
+        className={cn(
+          "fixed inset-0 transition-all duration-200",
+          sidebarOpen ? "left-56" : "left-14"
+        )}
+      >
+        <div className="grid h-full grid-cols-3 grid-rows-3 gap-px bg-border p-px">
+          <div className="min-h-0 min-w-0 overflow-hidden rounded-sm bg-background">
+            <ReferencesPanel courseId={currentCourseId!} />
+          </div>
+
+          <div className="min-h-0 min-w-0 overflow-hidden rounded-sm bg-background">
+            <NotebookSelectorPanel courseId={currentCourseId!} />
+          </div>
+
+          <div className="row-span-3 min-h-0 min-w-0 overflow-hidden rounded-sm bg-background">
             <MonkeyChatPanel panelId="chat1" courseId={currentCourseId!} />
-          </ResizablePanel>
-        </ResizablePanelGroup>
+          </div>
+
+          <div className="col-span-2 row-span-2 min-h-0 min-w-0 overflow-hidden rounded-sm bg-background">
+            <NotebookEditorPanel courseId={currentCourseId!} />
+          </div>
+        </div>
       </div>
     </CourseGuard>
   );

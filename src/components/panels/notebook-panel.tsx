@@ -19,13 +19,12 @@ import {
   NotebookPen,
   Plus,
   Trash2,
-  ArrowLeft,
   FileText,
 } from "lucide-react";
 import type { KnowledgeEntry } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export function NotebookPanel({ courseId }: { courseId: string }) {
+function useNotebookState(courseId: string) {
   const { entries, addEntry, updateEntry, deleteEntry } = useKnowledge(courseId);
   const { setLearningNoteId } = useAppStore();
   const learningNoteId = useLearningNoteId();
@@ -33,7 +32,6 @@ export function NotebookPanel({ courseId }: { courseId: string }) {
   const [selectedId, setSelectedIdLocal] = useState<string | null>(learningNoteId);
   const [editContent, setEditContent] = useState("");
   const [editTitle, setEditTitle] = useState("");
-
   const [createOpen, setCreateOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState("");
@@ -41,12 +39,11 @@ export function NotebookPanel({ courseId }: { courseId: string }) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevCourseRef = useRef(courseId);
 
-  function setSelectedId(id: string | null) {
+  const setSelectedId = useCallback((id: string | null) => {
     setSelectedIdLocal(id);
     setLearningNoteId(id);
-  }
+  }, [setLearningNoteId]);
 
-  // Reset when course changes
   useEffect(() => {
     if (courseId !== prevCourseRef.current) {
       prevCourseRef.current = courseId;
@@ -56,27 +53,29 @@ export function NotebookPanel({ courseId }: { courseId: string }) {
     }
   }, [courseId]);
 
-  // Sync from store when learningNoteId changes (e.g. course switch restores previous note)
   useEffect(() => {
     setSelectedIdLocal(learningNoteId);
   }, [learningNoteId]);
 
-  const selected = entries?.find((e) => e.id === selectedId) ?? null;
+  const selected = entries?.find((entry) => entry.id === selectedId) ?? null;
 
   useEffect(() => {
     if (selected) {
       setEditContent(selected.content);
       setEditTitle(selected.title);
     }
-  }, [selectedId]);
+  }, [selected]);
 
-  // Sync if entry changes externally (AI modified)
   useEffect(() => {
-    if (selected && document.activeElement?.tagName !== "TEXTAREA" && document.activeElement?.tagName !== "INPUT") {
+    if (
+      selected &&
+      document.activeElement?.tagName !== "TEXTAREA" &&
+      document.activeElement?.tagName !== "INPUT"
+    ) {
       setEditContent(selected.content);
       setEditTitle(selected.title);
     }
-  }, [selected?.content, selected?.title]);
+  }, [selected?.content, selected?.title, selected]);
 
   const autoSave = useCallback(
     (title: string, content: string) => {
@@ -130,55 +129,46 @@ export function NotebookPanel({ courseId }: { courseId: string }) {
     toast.success("已创建");
   }
 
-  // Note opened — block editor
-  if (selected) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex items-center justify-between px-3 py-2 border-b shrink-0">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0 shrink-0"
-              onClick={() => setSelectedId(null)}
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-            </Button>
-            <Input
-              value={editTitle}
-              onChange={(e) => handleTitleChange(e.target.value)}
-              className="text-xs font-semibold h-6 border-none shadow-none px-0 focus-visible:ring-0 flex-1"
-              placeholder="笔记标题"
-            />
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-1.5 text-xs text-destructive hover:text-destructive shrink-0"
-            onClick={handleDelete}
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
-        </div>
+  return {
+    entries,
+    selected,
+    selectedId,
+    editContent,
+    editTitle,
+    createOpen,
+    newTitle,
+    newContent,
+    setCreateOpen,
+    setNewTitle,
+    setNewContent,
+    handleCreate,
+    handleDelete,
+    handleContentChange,
+    handleTitleChange,
+    openNote,
+  };
+}
 
-        <div className="flex-1 overflow-y-auto p-3">
-          <BlockEditor
-            content={editContent}
-            onChange={handleContentChange}
-            className="compact"
-          />
-        </div>
-      </div>
-    );
-  }
+export function NotebookSelectorPanel({ courseId }: { courseId: string }) {
+  const {
+    entries,
+    selectedId,
+    createOpen,
+    newTitle,
+    newContent,
+    setCreateOpen,
+    setNewTitle,
+    setNewContent,
+    handleCreate,
+    openNote,
+  } = useNotebookState(courseId);
 
-  // List view
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b px-4 py-3 shrink-0">
         <div className="flex items-center gap-2">
           <NotebookPen className="h-4 w-4" />
-          <h3 className="font-semibold text-sm">笔记本</h3>
+          <h3 className="font-semibold text-sm">笔记选择</h3>
         </div>
         <Button
           onClick={() => {
@@ -197,10 +187,10 @@ export function NotebookPanel({ courseId }: { courseId: string }) {
 
       <div className="flex-1 overflow-y-auto">
         {(!entries || entries.length === 0) ? (
-          <div className="text-center text-muted-foreground py-8">
-            <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
+          <div className="py-8 text-center text-muted-foreground">
+            <FileText className="mx-auto mb-2 h-8 w-8 opacity-40" />
             <p className="text-xs">暂无笔记</p>
-            <p className="text-xs mt-1 opacity-70">点击添加创建第一条笔记</p>
+            <p className="mt-1 text-xs opacity-70">点击添加创建第一条笔记</p>
           </div>
         ) : (
           <div className="py-1">
@@ -209,12 +199,12 @@ export function NotebookPanel({ courseId }: { courseId: string }) {
                 key={entry.id}
                 onClick={() => openNote(entry)}
                 className={cn(
-                  "w-full text-left px-4 py-2 transition-colors",
-                  "hover:bg-accent/50"
+                  "w-full px-4 py-2 text-left transition-colors hover:bg-accent/50",
+                  selectedId === entry.id && "bg-accent"
                 )}
               >
-                <p className="text-xs font-medium truncate">{entry.title}</p>
-                <p className="text-xs text-muted-foreground truncate mt-0.5">
+                <p className="truncate text-xs font-medium">{entry.title}</p>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
                   {entry.content.slice(0, 60)}
                 </p>
               </button>
@@ -254,4 +244,62 @@ export function NotebookPanel({ courseId }: { courseId: string }) {
       </Dialog>
     </div>
   );
+}
+
+export function NotebookEditorPanel({ courseId }: { courseId: string }) {
+  const {
+    selected,
+    editContent,
+    editTitle,
+    handleDelete,
+    handleContentChange,
+    handleTitleChange,
+  } = useNotebookState(courseId);
+
+  if (!selected) {
+    return (
+      <div className="flex h-full items-center justify-center text-muted-foreground">
+        <div className="text-center">
+          <NotebookPen className="mx-auto mb-3 h-10 w-10 opacity-40" />
+          <p className="text-sm font-medium">请选择一条笔记</p>
+          <p className="mt-1 text-xs opacity-70">在上方“笔记选择”区域打开要编辑的笔记</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b px-3 py-2 shrink-0">
+        <div className="min-w-0 flex-1">
+          <Input
+            value={editTitle}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            className="h-7 border-none px-0 text-sm font-semibold shadow-none focus-visible:ring-0"
+            placeholder="笔记标题"
+          />
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs text-destructive hover:text-destructive shrink-0"
+          onClick={handleDelete}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3">
+        <BlockEditor
+          content={editContent}
+          onChange={handleContentChange}
+          className="compact"
+        />
+      </div>
+    </div>
+  );
+}
+
+export function NotebookPanel({ courseId }: { courseId: string }) {
+  return <NotebookEditorPanel courseId={courseId} />;
 }
