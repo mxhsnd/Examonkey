@@ -250,14 +250,23 @@
   border: 1px solid var(--border);
   padding: 0.5rem 0.75rem;
   text-align: left;
+
+.cm-editor .tok-heading,
+.cm-editor .tok-processingInstruction {
+  font-weight: 700;
 }
-.prose th {
-  background: var(--muted);
-  font-weight: 600;
+.cm-editor .tok-strong {
+  font-weight: 700;
 }
-.prose hr {
-  border: none;
-  border-top: 1px solid var(--border);
+.cm-editor .tok-emphasis {
+  font-style: italic;
+}
+.cm-editor .tok-monospace {
+  font-family: var(--font-mono);
+}
+.cm-editor .cm-panels {
+  background: transparent;
+}
   margin: 1.5rem 0;
 }
 .prose a {

@@ -326,14 +326,14 @@ export function MonkeyChatPanel({ panelId, courseId }: MonkeyChatPanelProps) {
       </div>
 
       <div className="px-4 pb-3 pt-2 shrink-0">
-        <div className="flex gap-2 items-end rounded-2xl border p-2 shadow-sm">
+        <div className="flex gap-2 items-end rounded-2xl border bg-transparent p-2 shadow-sm">
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="询问 Examonkey..."
             rows={1}
-            className="min-h-[36px] max-h-[120px] resize-none text-sm border-0 shadow-none focus-visible:ring-0 p-1"
+            className="min-h-[36px] max-h-[120px] resize-none border-0 bg-transparent p-1 text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"
           />
           <Button
             size="icon"

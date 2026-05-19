@@ -8,8 +8,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const entries = await readJson<KnowledgeEntry[]>(`courses/${body.courseId}/knowledge.json`, []);
   const idx = entries.findIndex((e) => e.id === id);
   if (idx === -1) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (body.title) entries[idx].title = body.title;
-  if (body.content) entries[idx].content = body.content;
+
+  if (Object.prototype.hasOwnProperty.call(body, "title")) {
+    entries[idx].title = body.title ?? "";
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "content")) {
+    entries[idx].content = body.content ?? "";
+  }
+
   entries[idx].updatedAt = new Date().toISOString();
   await writeJson(`courses/${body.courseId}/knowledge.json`, entries);
   return NextResponse.json(entries[idx]);

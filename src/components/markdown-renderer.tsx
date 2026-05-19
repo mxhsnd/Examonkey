@@ -2,10 +2,22 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { cn } from "@/lib/utils";
 
-export function MarkdownRenderer({ content }: { content: string }) {
+export function MarkdownRenderer({
+  content,
+  className,
+}: {
+  content: string;
+  className?: string;
+}) {
   return (
-    <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-p:my-1.5 prose-li:my-0.5 prose-pre:bg-muted prose-pre:border prose-code:before:content-none prose-code:after:content-none">
+    <div
+      className={cn(
+        "prose prose-sm max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-p:my-1.5 prose-li:my-0.5 prose-pre:bg-muted prose-pre:border prose-code:before:content-none prose-code:after:content-none",
+        className
+      )}
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -26,8 +38,8 @@ export function MarkdownRenderer({ content }: { content: string }) {
           },
           table({ children }) {
             return (
-              <div className="overflow-x-auto my-3">
-                <table className="w-full text-sm border-collapse border border-border">
+              <div className="my-3 overflow-x-auto">
+                <table className="w-full border-collapse border border-border text-sm">
                   {children}
                 </table>
               </div>
@@ -41,9 +53,7 @@ export function MarkdownRenderer({ content }: { content: string }) {
             );
           },
           td({ children }) {
-            return (
-              <td className="border border-border px-3 py-1.5">{children}</td>
-            );
+            return <td className="border border-border px-3 py-1.5">{children}</td>;
           },
         }}
       >

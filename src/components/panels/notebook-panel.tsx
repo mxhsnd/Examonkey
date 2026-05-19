@@ -13,18 +13,33 @@ import {
 } from "@/components/ui/dialog";
 import { useKnowledge } from "@/lib/hooks/use-knowledge";
 import { useAppStore, useLearningNoteId } from "@/lib/store";
-import { BlockEditor } from "@/components/block-editor";
+import { NoteMarkdownEditor } from "@/components/note-markdown-editor";
 import { toast } from "sonner";
-import {
-  NotebookPen,
-  Plus,
-  Trash2,
-  FileText,
-} from "lucide-react";
+import { NotebookPen, Plus, Trash2, FileText } from "lucide-react";
 import type { KnowledgeEntry } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-function useNotebookState(courseId: string) {
+export interface NotebookState {
+  entries: KnowledgeEntry[];
+  selected: KnowledgeEntry | null;
+  selectedId: string | null;
+  editContent: string;
+  editTitle: string;
+  createOpen: boolean;
+  newTitle: string;
+  newContent: string;
+  saveStatus: "idle" | "saving" | "saved";
+  setCreateOpen: (open: boolean) => void;
+  setNewTitle: (title: string) => void;
+  setNewContent: (content: string) => void;
+  handleCreate: () => Promise<void>;
+  handleDelete: () => Promise<void>;
+  handleContentChange: (value: string) => void;
+  handleTitleChange: (value: string) => void;
+  openNote: (entry: KnowledgeEntry) => void;
+}
+
+export function useNotebookState(courseId: string): NotebookState {
   const { entries, addEntry, updateEntry, deleteEntry } = useKnowledge(courseId);
   const { setLearningNoteId } = useAppStore();
   const learningNoteId = useLearningNoteId();
@@ -35,8 +50,11 @@ function useNotebookState(courseId: string) {
   const [createOpen, setCreateOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState("");
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTokenRef = useRef(0);
   const prevCourseRef = useRef(courseId);
 
   const setSelectedId = useCallback((id: string | null) => {
@@ -48,8 +66,10 @@ function useNotebookState(courseId: string) {
     if (courseId !== prevCourseRef.current) {
       prevCourseRef.current = courseId;
       setSelectedIdLocal(null);
+      setDraftId(null);
       setEditContent("");
       setEditTitle("");
+      setSaveStatus("idle");
     }
   }, [courseId]);
 
@@ -57,45 +77,56 @@ function useNotebookState(courseId: string) {
     setSelectedIdLocal(learningNoteId);
   }, [learningNoteId]);
 
-  const selected = entries?.find((entry) => entry.id === selectedId) ?? null;
+  const safeEntries = entries ?? [];
+  const selected = safeEntries.find((entry) => entry.id === selectedId) ?? null;
 
   useEffect(() => {
-    if (selected) {
+    if (!selected) {
+      setDraftId(null);
+      setEditContent("");
+      setEditTitle("");
+      setSaveStatus("idle");
+      return;
+    }
+
+    if (selected.id !== draftId) {
+      setDraftId(selected.id);
       setEditContent(selected.content);
       setEditTitle(selected.title);
+      setSaveStatus("idle");
     }
-  }, [selected]);
+  }, [selected, draftId]);
 
-  useEffect(() => {
-    if (
-      selected &&
-      document.activeElement?.tagName !== "TEXTAREA" &&
-      document.activeElement?.tagName !== "INPUT"
-    ) {
-      setEditContent(selected.content);
-      setEditTitle(selected.title);
-    }
-  }, [selected?.content, selected?.title, selected]);
+  const scheduleSave = useCallback((noteId: string, title: string, content: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
-  const autoSave = useCallback(
-    (title: string, content: string) => {
-      if (!selected) return;
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        updateEntry(selected.id, { title: title.trim() || selected.title, content });
-      }, 500);
-    },
-    [selected, updateEntry]
-  );
+    const token = ++saveTokenRef.current;
+    setSaveStatus("saving");
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        await updateEntry(noteId, { title, content });
+        if (saveTokenRef.current === token) {
+          setSaveStatus("saved");
+        }
+      } catch {
+        if (saveTokenRef.current === token) {
+          setSaveStatus("idle");
+        }
+      }
+    }, 500);
+  }, [updateEntry]);
 
   function handleContentChange(value: string) {
+    if (!selected) return;
     setEditContent(value);
-    autoSave(editTitle, value);
+    scheduleSave(selected.id, editTitle, value);
   }
 
   function handleTitleChange(value: string) {
+    if (!selected) return;
     setEditTitle(value);
-    autoSave(value, editContent);
+    scheduleSave(selected.id, value, editContent);
   }
 
   function openNote(entry: KnowledgeEntry) {
@@ -104,8 +135,10 @@ function useNotebookState(courseId: string) {
       debounceRef.current = null;
     }
     setSelectedId(entry.id);
+    setDraftId(entry.id);
     setEditContent(entry.content);
     setEditTitle(entry.title);
+    setSaveStatus("idle");
   }
 
   async function handleDelete() {
@@ -114,6 +147,8 @@ function useNotebookState(courseId: string) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     await deleteEntry(selected.id);
     setSelectedId(null);
+    setDraftId(null);
+    setSaveStatus("idle");
     toast.success("已删除");
   }
 
@@ -122,15 +157,18 @@ function useNotebookState(courseId: string) {
       toast.error("标题和内容不能为空");
       return;
     }
-    await addEntry(newTitle.trim(), newContent.trim());
+    const entry = await addEntry(newTitle.trim(), newContent.trim());
     setCreateOpen(false);
     setNewTitle("");
     setNewContent("");
     toast.success("已创建");
+    if (entry) {
+      openNote(entry);
+    }
   }
 
   return {
-    entries,
+    entries: safeEntries,
     selected,
     selectedId,
     editContent,
@@ -138,6 +176,7 @@ function useNotebookState(courseId: string) {
     createOpen,
     newTitle,
     newContent,
+    saveStatus,
     setCreateOpen,
     setNewTitle,
     setNewContent,
@@ -149,7 +188,7 @@ function useNotebookState(courseId: string) {
   };
 }
 
-export function NotebookSelectorPanel({ courseId }: { courseId: string }) {
+export function NotebookSelectorPanel({ state }: { state: NotebookState }) {
   const {
     entries,
     selectedId,
@@ -161,7 +200,7 @@ export function NotebookSelectorPanel({ courseId }: { courseId: string }) {
     setNewContent,
     handleCreate,
     openNote,
-  } = useNotebookState(courseId);
+  } = state;
 
   return (
     <div className="flex h-full flex-col">
@@ -186,7 +225,7 @@ export function NotebookSelectorPanel({ courseId }: { courseId: string }) {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {(!entries || entries.length === 0) ? (
+        {entries.length === 0 ? (
           <div className="py-8 text-center text-muted-foreground">
             <FileText className="mx-auto mb-2 h-8 w-8 opacity-40" />
             <p className="text-xs">暂无笔记</p>
@@ -246,15 +285,16 @@ export function NotebookSelectorPanel({ courseId }: { courseId: string }) {
   );
 }
 
-export function NotebookEditorPanel({ courseId }: { courseId: string }) {
+export function NotebookEditorPanel({ state }: { state: NotebookState }) {
   const {
     selected,
     editContent,
     editTitle,
+    saveStatus,
     handleDelete,
     handleContentChange,
     handleTitleChange,
-  } = useNotebookState(courseId);
+  } = state;
 
   if (!selected) {
     return (
@@ -262,7 +302,7 @@ export function NotebookEditorPanel({ courseId }: { courseId: string }) {
         <div className="text-center">
           <NotebookPen className="mx-auto mb-3 h-10 w-10 opacity-40" />
           <p className="text-sm font-medium">请选择一条笔记</p>
-          <p className="mt-1 text-xs opacity-70">在上方“笔记选择”区域打开要编辑的笔记</p>
+          <p className="mt-1 text-xs opacity-70">在左侧“笔记选择”区域打开要编辑的笔记</p>
         </div>
       </div>
     );
@@ -275,31 +315,32 @@ export function NotebookEditorPanel({ courseId }: { courseId: string }) {
           <Input
             value={editTitle}
             onChange={(e) => handleTitleChange(e.target.value)}
-            className="h-7 border-none px-0 text-sm font-semibold shadow-none focus-visible:ring-0"
+            className="h-7 border-none bg-transparent px-0 text-sm font-semibold shadow-none focus-visible:ring-0 dark:bg-transparent"
             placeholder="笔记标题"
           />
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs text-destructive hover:text-destructive shrink-0"
-          onClick={handleDelete}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+        <div className="ml-3 flex items-center gap-2 shrink-0">
+          <span className="text-xs text-muted-foreground">
+            {saveStatus === "saving" ? "保存中..." : saveStatus === "saved" ? "已保存" : ""}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-destructive hover:text-destructive shrink-0"
+            onClick={handleDelete}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">
-        <BlockEditor
-          content={editContent}
-          onChange={handleContentChange}
-          className="compact"
-        />
+        <NoteMarkdownEditor content={editContent} onChange={handleContentChange} />
       </div>
     </div>
   );
 }
 
-export function NotebookPanel({ courseId }: { courseId: string }) {
-  return <NotebookEditorPanel courseId={courseId} />;
+export function NotebookPanel({ state }: { state: NotebookState }) {
+  return <NotebookEditorPanel state={state} />;
 }
