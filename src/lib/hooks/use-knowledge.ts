@@ -33,6 +33,21 @@ export function useKnowledge(courseId: string | null) {
     fetchEntries();
   }, [fetchEntries]);
 
+  useEffect(() => {
+    if (!courseId) return;
+
+    function handleKnowledgeChanged(event: Event) {
+      const detail = (event as CustomEvent<{ courseId?: string }>).detail;
+      if (detail?.courseId !== courseId) return;
+      fetchEntries();
+    }
+
+    window.addEventListener("knowledge:changed", handleKnowledgeChanged);
+    return () => {
+      window.removeEventListener("knowledge:changed", handleKnowledgeChanged);
+    };
+  }, [courseId, fetchEntries]);
+
   async function addEntry(title: string, content: string) {
     if (!courseId) return null;
 
@@ -70,5 +85,5 @@ export function useKnowledge(courseId: string | null) {
     setEntries((prev) => (prev ?? []).filter((entry) => entry.id !== id));
   }
 
-  return { entries, loading, addEntry, updateEntry, deleteEntry };
+  return { entries, loading, addEntry, updateEntry, deleteEntry, refreshEntries: fetchEntries };
 }

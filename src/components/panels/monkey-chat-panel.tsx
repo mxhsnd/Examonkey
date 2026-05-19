@@ -48,10 +48,16 @@ function parseNoteOperations(text: string) {
   return { ops, displayText };
 }
 
+function notifyKnowledgeChanged(courseId: string) {
+  window.dispatchEvent(new CustomEvent("knowledge:changed", { detail: { courseId } }));
+}
+
 async function executeNoteOps(
   ops: ReturnType<typeof parseNoteOperations>["ops"],
   courseId: string
 ) {
+  let changed = false;
+
   for (const op of ops) {
     if (op.type === "update") {
       await fetch(`/api/knowledge/${op.noteId}`, {
@@ -59,13 +65,19 @@ async function executeNoteOps(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ courseId, content: op.content }),
       });
+      changed = true;
     } else {
       await fetch("/api/knowledge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ courseId, source: "manual", title: op.title, content: op.content }),
       });
+      changed = true;
     }
+  }
+
+  if (changed) {
+    notifyKnowledgeChanged(courseId);
   }
 }
 

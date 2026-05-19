@@ -250,7 +250,15 @@
   border: 1px solid var(--border);
   padding: 0.5rem 0.75rem;
   text-align: left;
-
+}
+.prose hr {
+  margin: 1.5rem 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.prose input[type="checkbox"] {
+  margin-right: 0.45rem;
+}
 .cm-editor .tok-heading,
 .cm-editor .tok-processingInstruction {
   font-weight: 700;
@@ -266,8 +274,6 @@
 }
 .cm-editor .cm-panels {
   background: transparent;
-}
-  margin: 1.5rem 0;
 }
 .prose a {
   color: var(--primary);

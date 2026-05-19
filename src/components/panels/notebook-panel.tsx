@@ -310,31 +310,33 @@ export function NotebookEditorPanel({ state }: { state: NotebookState }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b px-3 py-2 shrink-0">
-        <div className="min-w-0 flex-1">
-          <Input
-            value={editTitle}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            className="h-7 border-none bg-transparent px-0 text-sm font-semibold shadow-none focus-visible:ring-0 dark:bg-transparent"
-            placeholder="笔记标题"
-          />
-        </div>
-        <div className="ml-3 flex items-center gap-2 shrink-0">
-          <span className="text-xs text-muted-foreground">
-            {saveStatus === "saving" ? "保存中..." : saveStatus === "saved" ? "已保存" : ""}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs text-destructive hover:text-destructive shrink-0"
-            onClick={handleDelete}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+      <div className="shrink-0 border-b px-4 py-3">
+        <div className="mx-auto flex w-full max-w-[760px] items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <Input
+              value={editTitle}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              className="h-8 border-none bg-transparent px-0 text-base font-semibold tracking-[-0.01em] shadow-none focus-visible:ring-0 dark:bg-transparent"
+              placeholder="笔记标题"
+            />
+          </div>
+          <div className="ml-3 flex shrink-0 items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {saveStatus === "saving" ? "保存中..." : saveStatus === "saved" ? "已保存" : ""}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-destructive hover:text-destructive shrink-0"
+              onClick={handleDelete}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className="flex-1 overflow-y-auto bg-background/80 px-4 py-4">
         <NoteMarkdownEditor content={editContent} onChange={handleContentChange} />
       </div>
     </div>
